@@ -102,3 +102,11 @@ venv.bak/
 
 # mypy
 .mypy_cache/
+
+#JSON data dumps
+*.json
+
+#Uasset originals
+*.uasset
+#.pak completed mod
+*.pak

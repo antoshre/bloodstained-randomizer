@@ -267,16 +267,15 @@ def applyPatches(raw, patches):
 	
 if __name__ == "__main__":
 	import argparse
+	import os
 	
 	parser = argparse.ArgumentParser( \
 		description="Bloodstained drop randomizer",
-		usage="%(prog)s --json [jsonfile] --input [infile] --output [outfile]"
+		usage="%(prog)s --json [jsonfile] --input [infile]"
 		)
 	parser.add_argument("--json", help="JSON dump of PB_DT_DropRateMaster.uasset", \
 						action='store', required=True)
 	parser.add_argument("--input", help="Original 'PB_DT_DropRateMaster.uasset' file", \
-						action='store', required=True)
-	parser.add_argument("--output", help="Filename for modified output", \
 						action='store', required=True)
 	parser.add_argument("--seed", help="Seed for randomizer", action='store', default=random.random())
 	
@@ -355,12 +354,17 @@ if __name__ == "__main__":
 	
 	
 	#with open("PB_DT_DropRateMaster.uasset", "rb") as file:
+	
 	with open(args.input, "rb") as file:
 		raw = file.read()
 	
 	mod = applyPatches(raw, patches)
 	
-	with open(args.output, "wb") as file:
+	outputfile = "unrealpak\Randomizer\BloodstainedRotN\Content\Core\DataTable\PB_DT_DropRateMaster.uasset"
+	with open(outputfile, "wb") as file:
 		file.write(mod)
 	
+	#create mod .pak file
+	os.system(r".\unrealpak\UnrealPak-With-Compression.bat Randomizer")
+	os.system(r"move .\unrealpak\Randomizer.pak .")
 	sys.exit()
