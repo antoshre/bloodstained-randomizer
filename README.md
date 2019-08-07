@@ -5,7 +5,7 @@ Bloodstained drop randomizer
 Modifies the `PB_DT_DropRateMaster.uasset` file from Bloodstained to randomize drops.
 Most definitely **alpha quality**!  Not ready for general usage, still requires significant knowledge to use correctly.
 
-~~TODO: Merge in the json dumper and `.pak` packer to produce a final output.~~
+TODO: Merge in the json dumper ~~and `.pak` packer to produce a final output.~~
 
 ## Usage
 
