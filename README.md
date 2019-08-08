@@ -10,7 +10,7 @@ Most definitely **alpha quality**!  Not ready for general usage, still requires 
 ## Usage
 
 ```
-usage: randomizer.py --json [jsonfile] --input [infile] --output [outfile]
+usage: randomizer.py --input [infile]
 
 Bloodstained drop randomizer
 
