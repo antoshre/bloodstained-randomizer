@@ -269,28 +269,37 @@ if __name__ == "__main__":
 	import argparse
 	import os
 	
+	from uasset_dt_to_json import dumper as udump
+	
 	parser = argparse.ArgumentParser( \
 		description="Bloodstained drop randomizer",
-		usage="%(prog)s --json [jsonfile] --input [infile]"
+		usage="%(prog)s --input [infile]"
 		)
-	parser.add_argument("--json", help="JSON dump of PB_DT_DropRateMaster.uasset", \
-						action='store', required=True)
+	parser.add_argument("--debug", help="Enable debug output", action='store_true', default=False)
 	parser.add_argument("--input", help="Original 'PB_DT_DropRateMaster.uasset' file", \
 						action='store', required=True)
 	parser.add_argument("--seed", help="Seed for randomizer", action='store', default=random.random())
 	
 	#Parse arguments
 	args = parser.parse_args()
-
-	#Set random seed
-	random.seed(args.seed)
 	
+	#Create JSON from original input file
+	with open(args.input, "rb") as original_file:
+		uasset = udump.UAsset(original_file)
+	items = [udump.Item(obj) for obj in uasset.Summary.Exports[0].Object.ObjectData.Data]
+	drop_rate_master = json.loads(json.dumps(items, cls=udump.UAssetEncoder))
+	
+	""" Old behavior
 	#Open json dump
 	#TODO: use the datatable-to-json.py file to generate from the original
 	with open(args.json, "r") as file:
 		raw = file.read()
 	drop_rate_master = json.loads(raw)
+	"""
 	
+	#Set random seed
+	random.seed(args.seed)
+		
 	#get all possible locations with associated drops
 	all_locations = [DropLocation(*getAllFromEntry(entry)) for entry in drop_rate_master]
 

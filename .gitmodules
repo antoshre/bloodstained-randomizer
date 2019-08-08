@@ -1,6 +1,3 @@
-[submodule "uasset-dt-to-json"]
-	path = uasset-dt-to-json
-	url = https://github.com/thegreatunclean/uasset-dt-to-json
 [submodule "uasset_dt_to_json"]
 	path = uasset_dt_to_json
 	url = https://github.com/thegreatunclean/uasset-dt-to-json
