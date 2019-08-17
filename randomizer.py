@@ -109,7 +109,7 @@ class DropLocation():
 #Yield all chests
 def allChests(locs):
 	for loc in locs:
-		if "Treasurebox" in loc.name:
+		if "Treasurebox" in loc.name and filterChests(loc):
 			yield loc
 #True: accept item into randomizer logic
 #False: reject item from randomizer logic
@@ -134,7 +134,7 @@ def filterChests(loc):
 #Yield all shard entries
 def allMobs(locs):
 	for loc in locs:
-		if "_Shard" in loc.name:
+		if "_Shard" in loc.name and filterMobs(loc):
 			yield loc
 		other_good_names = [
 			"_1ST_Treasure", #Carpenter
@@ -153,7 +153,9 @@ def filterMobs(loc):
 		"Doublejump", #Double Jump
 		"Demoniccapture", #Craftwork
 		"Aquastream", #Only to make sure water access is available
-		"Bloodsteel" #Blood Steal
+		"Bloodsteel", #Blood Steal
+		"SwingTentacle", #Galleon Minerva boss drop, must be valid
+		"Ceruleansplash", #really just need to make sure N3006_OpeningDemo has valid shard drop. I think...
 	]
 	for shard_name in progression_shard_names:
 		if shard_name in loc.shard.name["Value"]:
@@ -163,7 +165,7 @@ def filterMobs(loc):
 
 def allWalls(locs):
 	for loc in locs:
-		if "Wall_" in loc.name:
+		if "Wall_" in loc.name and filterWalls(loc):
 			yield loc
 def filterWalls(loc):
 	bad_item_names = [
@@ -208,9 +210,9 @@ def clearAllDrops(locs):
 		patches.append(Patch(loc.coin.rate["offset"], 100.0))
 	return patches
 	
-def assignShards(orig, new):
+def assignShards(origs, news):
 	patchset = []
-	for orig, new in zip(orig,new):
+	for orig, new in zip(origs,news):
 		patchset.append( Patch(orig.shard.index["offset"], new.index["Value"]) )
 		patchset.append( Patch(orig.shard.rate["offset"], new.rate["Value"]))
 	return patchset
@@ -263,6 +265,25 @@ def applyPatches(raw, patches):
 		else:
 			raise NotImplementedError(type(patch.offset))
 	return stream.getbuffer()
+
+#Set drop rates to 100% for mobs that can only be fought once
+#TODO: Untested!
+def handleNonRepeatableMobs(locs):
+	relevantMobs = ['N1001', 'N1011', 'N1003', 'N2004', 'N1005',
+					'N2001', 'N1006', 'N1012', 'N1002', 'N2014',
+					'N2007', 'N2006', 'N1004', 'N1008', 'N1009',
+					'N1013', 'N2012']
+	patchset = []
+	for loc in locs:
+		for mobnum in relevantMobs:
+			if mobnum in loc.name:
+				patchset.append( Patch( loc.shard.rate["offset"], 100.0) )
+				patchset.append( Patch( loc.common_item.rate["offset"], 100.0) )
+				patchset.append( Patch( loc.rare_item.rate["offset"], 100.0) )
+				patchset.append( Patch( loc.common_ingredient.rate["offset"], 100.0) )
+				patchset.append( Patch( loc.rare_ingredient.rate["offset"], 100.0) )
+	return patchset
+		
 	
 	
 if __name__ == "__main__":
@@ -289,14 +310,6 @@ if __name__ == "__main__":
 	items = [udump.Item(obj) for obj in uasset.Summary.Exports[0].Object.ObjectData.Data]
 	drop_rate_master = json.loads(json.dumps(items, cls=udump.UAssetEncoder))
 	
-	""" Old behavior
-	#Open json dump
-	#TODO: use the datatable-to-json.py file to generate from the original
-	with open(args.json, "r") as file:
-		raw = file.read()
-	drop_rate_master = json.loads(raw)
-	"""
-	
 	#Set random seed
 	random.seed(args.seed)
 		
@@ -304,11 +317,11 @@ if __name__ == "__main__":
 	all_locations = [DropLocation(*getAllFromEntry(entry)) for entry in drop_rate_master]
 
 	#get just chests
-	all_chests = [loc for loc in allChests(all_locations) if filterChests(loc)]
+	all_chests = [loc for loc in allChests(all_locations)]
 	#get just mobs
-	all_mobs = [loc for loc in allMobs(all_locations) if filterMobs(loc)]
+	all_mobs = [loc for loc in allMobs(all_locations)]
 	#get just walls
-	all_walls = [loc for loc in allWalls(all_locations) if filterWalls(loc)]
+	all_walls = [loc for loc in allWalls(all_locations)]
 	
 	
 	#Find empty/low drops to use if needed.
@@ -346,8 +359,6 @@ if __name__ == "__main__":
 	#shuffle locations
 	random.shuffle(combined)
 	
-	#TODO: N3006_OpeningDemo MUST HAVE VALID SHARD!
-	
 	#re-assign random shards to first len(shards) locations
 	patches += assignShards(combined[: len(shards)], shards)
 	#'' '' '' first len(rare_items) locations
@@ -361,6 +372,9 @@ if __name__ == "__main__":
 	#Should result in all shards/items/coins being re-assigned to somewhere.
 	#Does nothing to guarantee things intended to be re-aquired like ingredients are infinitely available.
 	
+	#For mobs that are single-fight only, set drop rates to 100% for any none-None items/shards
+	#TODO: UNTESTED
+	patches += handleNonRepeatableMobs(combined)
 	
 	#with open("PB_DT_DropRateMaster.uasset", "rb") as file:
 	
