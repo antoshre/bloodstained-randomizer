@@ -1,0 +1,4 @@
+[submodule "uasset_dt_to_json"]
+	path = uasset_dt_to_json
+	url = http://github.com/thegreatunclean/uasset-dt-to-json.git
+	branch = experimental
