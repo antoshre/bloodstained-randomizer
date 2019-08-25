@@ -7,6 +7,8 @@ Most definitely **alpha quality**!  Not ready for general usage, still requires 
 
 ~~TODO: Merge in the json dumper and `.pak` packer to produce a final output.~~
 
+### Note: do not forget to initialize the submodule!  `git submodule update --init` after cloning.
+
 ## Usage
 
 ```
