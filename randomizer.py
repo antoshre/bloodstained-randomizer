@@ -2,289 +2,254 @@ import json
 import binascii
 import struct
 import random
+import itertools
 from io import BytesIO
 import sys
 
-from operator import itemgetter
-
-class Item():
-	def __init__(self, name, index, quantity, rate):
-		self.name = name
-		self.index = index
-		self.quantity = quantity
-		self.rate = rate
+class DropEntry():
+	def __init__(self, name_, shard_, rareitem_, commonitem_, rareing_, commoning_, coin_, areachange_):
+		self.Name = name_
+		self.Shard = shard_
+		self.RareItem = rareitem_
+		self.CommonItem = commonitem_
+		self.RareIngredient = rareing_
+		self.CommonIngredient = commoning_
+		self.Coin = coin_
+		self.AreaChange = areachange_
 	def __repr__(self):
-		return self.__class__.__name__ + "({}, index={}, quantity={}, rate={})".format(self.name, self.index, self.quantity, self.rate)
-class CommonItem(Item):
-	def __init__(self, *args):
-		super().__init__(*args)
-class RareItem(Item):
-	def __init__(self, *args):
-		super().__init__(*args)
+		return "DropEntry({}, {}, {}, {}, {}, {}, {})" \
+				.format(self.Name, self.Shard, self.RareItem, self.CommonItem, self.RareIngredient, self.CommonIngredient, self.Coin)
+
 		
-class CommonIngredient(Item):
-	def __init__(self, *args):
-		super().__init__(*args)
-class RareIngredient(Item):
-	def __init__(self, *args):
-		super().__init__(*args)
-class Shard(Item):
-	def __init__(self, *args):
-		super().__init__(*args)		
+class Shard():
+	def __init__(self, id, rate, names):
+		self.Id = id['Index']
+		self.Rate = rate
+		self.Name = names[str(self.Id['Value'])]['Name'][:-1]
+	def __repr__(self):
+		if 'None' in self.Name:
+			return "Shard(None)"
+		return "Shard({}, Id={}, Rate={})".format(self.Name, self.Id['Value'], self.Rate['Value'])
+		
+class Item():
+	def __init__(self, id, quantity, rate, names):
+		self.Id = id['Index']
+		self.Quantity = quantity
+		self.Rate = rate
+		self.Name = names[str(self.Id['Value'])]['Name'][:-1]
+	def __repr__(self):
+		if self.Quantity['Value'] == 0:
+			return "Item(None)"
+		return "Item({}, Id={}, Quantity={}, Rate={})".format(self.Name, self.Id['Value'], self.Quantity['Value'], self.Rate['Value'])
+		
 class Coin():
-	def __init__(self, name, index, rate, override):
-		self.name = name
-		self.index = index
-		self.rate = rate
-		self.override = override
+	def __init__(self, type, override, rate, names):
+		self.Type = type['Index']
+		self.Override = override
+		self.Rate = rate
+		self.Name = names[ str(self.Type['Value'])]['Name'][:-1]
 	def __repr__(self):
-		return "Coin({}, index={}, rate={}, override={})".format(self.name, self.index, self.rate, self.override)
+		if 'None' in self.Name:
+			return "Coin(None)"
+		return "Coin({}, Type={}, Override={}, Rate={})".format(self.Name, self.Type, self.Override, self.Rate)
 
-def getNameFromEntry(entry):
-	return entry["Key"]["Value"]["Value"]
-def getRareItemFromEntry(entry):
-	name = entry["Properties"]["RareItemId\x00"][1]["Value"]
-	index = entry["Properties"]["RareItemId\x00"][1]["Index"]
-	quantity = entry["Properties"]["RareItemQuantity\x00"][1]
-	rate = entry["Properties"]["RareItemRate\x00"][1]
-	return RareItem(name, index, quantity, rate)
-def getCommonItemFromEntry(entry):
-	name = entry["Properties"]["CommonItemId\x00"][1]["Value"]
-	index = entry["Properties"]["CommonItemId\x00"][1]["Index"]
-	quantity = entry["Properties"]["CommonItemQuantity\x00"][1]
-	rate = entry["Properties"]["CommonRate\x00"][1]
-	return CommonItem(name, index, quantity, rate)
-def getRareIngredientFromEntry(entry):
-	name = entry["Properties"]["RareIngredientId\x00"][1]["Value"]
-	index = entry["Properties"]["RareIngredientId\x00"][1]["Index"]
-	quantity = entry["Properties"]["RareIngredientQuantity\x00"][1]
-	rate = entry["Properties"]["RareIngredientRate\x00"][1]
-	return RareIngredient(name, index, quantity, rate)
-def getCommonIngredientFromEntry(entry):
-	name = entry["Properties"]["CommonIngredientId\x00"][1]["Value"]
-	index = entry["Properties"]["CommonIngredientId\x00"][1]["Index"]
-	quantity = entry["Properties"]["CommonIngredientQuantity\x00"][1]
-	rate = entry["Properties"]["CommonIngredientRate\x00"][1]
-	return CommonIngredient(name, index, quantity, rate)
-def getShardFromEntry(entry):
-	name = entry["Properties"]["ShardId\x00"][1]["Value"]
-	index = entry["Properties"]["ShardId\x00"][1]["Index"]
-	rate = entry["Properties"]["ShardRate\x00"][1]
-	return Shard(name, index, 1, rate)
-def getCoinFromEntry(entry):
-	name = entry["Properties"]["CoinType\x00"][1]["Value"]
-	index = entry["Properties"]["CoinType\x00"][1]["Index"]
-	override = entry["Properties"]["CoinOverride\x00"][1]
-	rate = entry["Properties"]["CoinRate\x00"][1]
-	return Coin(name, index, rate, override)
-def getAllFromEntry(entry):
-	name = getNameFromEntry(entry)
-	shard = getShardFromEntry(entry)
-	ritem = getRareItemFromEntry(entry)
-	citem = getCommonItemFromEntry(entry)
-	ring = getRareIngredientFromEntry(entry)
-	cing = getCommonIngredientFromEntry(entry)
-	coin = getCoinFromEntry(entry)
-	return (name, shard, ritem, citem, ring, cing, coin)
-	
-class DropLocation():
-	def __init__(self, name, shard, rare_item, common_item, rare_ingredient, common_ingredient, coin):
-		self.name = name
-		self.shard = shard
-		self.rare_item = rare_item
-		self.common_item = common_item
-		self.rare_ingredient = rare_ingredient
-		self.common_ingredient = common_ingredient
-		self.coin = coin
-	def __repr__(self):
-		return "DropLocation(\n\t{},\n\t{},\n\t{},\n\t{},\n\t{},\n\t{},\n\t{}\n)".format( \
-			self.name, \
-			self.shard, \
-			self.rare_item, \
-			self.common_item, \
-			self.rare_ingredient, \
-			self.common_ingredient, \
-			self.coin)
-
-#Yield all chests
-def allChests(locs):
-	for loc in locs:
-		if "Treasurebox" in loc.name and filterChests(loc):
-			yield loc
-#True: accept item into randomizer logic
-#False: reject item from randomizer logic
-def filterChests(loc):
-	#Names to filter out
-	bad_item_names = [
-		"MaxHPUP", "MaxMPUP", "MaxBulletUP", #Max HP/MP/Bullet upgrades
-		"ChangeHP", #Dunno what this is
-		"Silverbromide", #Progression item
-		"SpikeBreast" #Spike Aegis needed for progression, lock for now
-	]
-	
-	for name in bad_item_names:
-		if name in loc.rare_item.name["Value"]:
-			print("Rejecting chest item: {}".format(name))
-			return False
-		if name in loc.common_item.name["Value"]:
-			print("Rejecting chest item: {}".format(name))
-			return False
-			
-	return True
-#Yield all shard entries
-def allMobs(locs):
-	for loc in locs:
-		if "_Shard" in loc.name and filterMobs(loc):
-			yield loc
-		other_good_names = [
-			"_1ST_Treasure", #Carpenter
-			"_2ND_Treasure" #Also Carpenter
-		]
-		for other in other_good_names:
-			if other in loc.name:
-				yield loc
-				
-#True/False whether to include this specific shard in random pool
-def filterMobs(loc):
-	progression_shard_names = [
-		"Reflectionray", #Reflect Ray
-		"Dimensionshift", #Dimension Shift
-		"Invert", #Invert
-		"Doublejump", #Double Jump
-		"Demoniccapture", #Craftwork
-		"Aquastream", #Only to make sure water access is available
-		"Bloodsteel", #Blood Steal
-		"SwingTentacle", #Galleon Minerva boss drop, must be valid
-		"Ceruleansplash", #really just need to make sure N3006_OpeningDemo has valid shard drop. I think...
-	]
-	for shard_name in progression_shard_names:
-		if shard_name in loc.shard.name["Value"]:
-			print("Rejecting shard: {}".format(loc.shard.name))
-			return False
-	return True
-
-def allWalls(locs):
-	for loc in locs:
-		if "Wall_" in loc.name and filterWalls(loc):
-			yield loc
-def filterWalls(loc):
-	bad_item_names = [
-		"MaxHPUP", "MaxMPUp", "MaxBulletUP", #Max HP/MP/Bullet upgrades
-		"ChangeHP", #Dunno what this is
-	]
-	for name in bad_item_names:
-		if name in loc.rare_item.name["Value"]:
-			print("Rejecting item: {}".format(name))
-			return False
-		if name in loc.common_item.name["Value"]:
-			print("Rejecting item: {}".format(name))
-			return False
-	return True
-	
 class Patch():
 	def __init__(self, offset, value):
-		self.offset = offset
-		self.value = value
+		self.Offset = offset
+		self.Value = value
 	def __repr__(self):
-		return "Patch(offset={}, value={})".format(self.offset, self.value)
-
-def clearAllDrops(locs):
-	patches = []
-	for loc in locs:
-		patches.append(Patch(loc.shard.index["offset"], empty_drop.index["Value"]))
-		patches.append(Patch(loc.shard.rate["offset"], 0.0))
-		patches.append(Patch(loc.rare_item.index["offset"], empty_drop.index["Value"]))
-		patches.append(Patch(loc.rare_item.quantity["offset"], 0))
-		patches.append(Patch(loc.rare_item.rate["offset"], 0.0))
-		patches.append(Patch(loc.common_item.index["offset"], empty_drop.index["Value"]))
-		patches.append(Patch(loc.common_item.quantity["offset"], 0))
-		patches.append(Patch(loc.common_item.rate["offset"], 0.0))
-		patches.append(Patch(loc.rare_ingredient.index["offset"], empty_drop.index["Value"]))
-		patches.append(Patch(loc.rare_ingredient.quantity["offset"], 0))
-		patches.append(Patch(loc.rare_ingredient.rate["offset"], 0.0))
-		patches.append(Patch(loc.common_ingredient.index["offset"], empty_drop.index["Value"]))
-		patches.append(Patch(loc.common_ingredient.quantity["offset"], 0))
-		patches.append(Patch(loc.common_ingredient.rate["offset"], 0.0))
-		patches.append(Patch(loc.coin.index["offset"], empty_coin.index["Value"]))
-		patches.append(Patch(loc.coin.override["offset"], empty_coin.override["Value"]))
-		patches.append(Patch(loc.coin.rate["offset"], 100.0))
-	return patches
-	
-def assignShards(origs, news):
-	patchset = []
-	for orig, new in zip(origs,news):
-		patchset.append( Patch(orig.shard.index["offset"], new.index["Value"]) )
-		patchset.append( Patch(orig.shard.rate["offset"], new.rate["Value"]))
-	return patchset
-def assignRareItems(origs, news):
-	patchset = []
-	for orig, new in zip(origs, news):
-		patchset.append( Patch(orig.rare_item.index["offset"], new.index["Value"]))
-		patchset.append( Patch(orig.rare_item.quantity["offset"], new.quantity["Value"]))
-		patchset.append( Patch(orig.rare_item.rate["offset"], new.rate["Value"]))
-	return patchset
-def assignCommonItems(origs, news):
-	patchset = []
-	for orig, new in zip(origs, news):
-		patchset.append( Patch(orig.common_item.index["offset"], new.index["Value"]))
-		patchset.append( Patch(orig.common_item.quantity["offset"], new.quantity["Value"]))
-		patchset.append( Patch(orig.common_item.rate["offset"], new.rate["Value"]))
-	return patchset
-def assignRareIngredients(origs, news):
-	patchset = []
-	for orig, new in zip(origs, news):
-		patchset.append( Patch(orig.rare_ingredient.index["offset"], new.index["Value"]))
-		patchset.append( Patch(orig.rare_ingredient.quantity["offset"], new.quantity["Value"]))
-		patchset.append( Patch(orig.rare_ingredient.rate["offset"], new.rate["Value"]))
-	return patchset
-def assignCommonIngredients(origs, news):
-	patchset = []
-	for orig, new in zip(origs, news):
-		patchset.append( Patch(orig.common_ingredient.index["offset"], new.index["Value"]))
-		patchset.append( Patch(orig.common_ingredient.quantity["offset"], new.quantity["Value"]))
-		patchset.append( Patch(orig.common_ingredient.rate["offset"], new.rate["Value"]))
-	return patchset
-def assignCoins(origs, news):
-	patchset = []
-	for orig, new in zip(origs, news):
-		if new.rate["Value"] == 0.0:
-			continue
-		patchset.append( Patch(orig.coin.index["offset"], new.index["Value"]))
-		patchset.append( Patch(orig.coin.override["offset"], new.override["Value"]))
-		patchset.append( Patch(orig.coin.rate["offset"], new.rate["Value"]))
-	return patchset
-	
-def applyPatches(raw, patches):
-	stream = BytesIO(raw)
-	for patch in patches:
-		stream.seek(patch.offset)
-		if isinstance(patch.value, int):
-			stream.write(struct.pack("i", patch.value))
-		elif isinstance(patch.value, float):
-			stream.write(struct.pack("f", patch.value))
-		else:
-			raise NotImplementedError(type(patch.offset))
-	return stream.getbuffer()
-
-#Set drop rates to 100% for mobs that can only be fought once
-#TODO: Untested!
-def handleNonRepeatableMobs(locs):
-	relevantMobs = ['N1001', 'N1011', 'N1003', 'N2004', 'N1005',
-					'N2001', 'N1006', 'N1012', 'N1002', 'N2014',
-					'N2007', 'N2006', 'N1004', 'N1008', 'N1009',
-					'N1013', 'N2012']
-	patchset = []
-	for loc in locs:
-		for mobnum in relevantMobs:
-			if mobnum in loc.name:
-				patchset.append( Patch( loc.shard.rate["offset"], 100.0) )
-				patchset.append( Patch( loc.common_item.rate["offset"], 100.0) )
-				patchset.append( Patch( loc.rare_item.rate["offset"], 100.0) )
-				patchset.append( Patch( loc.common_ingredient.rate["offset"], 100.0) )
-				patchset.append( Patch( loc.rare_ingredient.rate["offset"], 100.0) )
-	return patchset
+		return "Patch(offset={}, value={})".format(self.Offset, self.Value)		
 		
+def filterHPMPBulletUP(entries):
+	#Return True if keep, False if drop entry
+	def f(entry):
+		bad = ['MaxHPUP', 'MaxMPUP', 'MaxBulletUP']
+		for name in bad:
+			if name in entry.RareItem.Name:
+				return False
+			if name in entry.CommonItem.Name:
+				return False
+		return True
+	return list(filter(f, entries))
 	
+def filterProgressionShards(entries):
+	#True if keep, False if drop
+	def f(entry):
+		bad = [	'ReflectionRay',
+				'Dimensionshift',
+				'Invert',
+				'Doublejump',
+				'Demoniccapture',
+				'Aquastream',
+				'Bloodsteel', 
+				'SwingTentacle',
+				'Ceruleansplash',
+				'FireCannon', #Needed on Galleon Minerva
+		]
+		for name in bad:
+			if name in entry.Shard.Name:
+				return False
+		return True
+	return list(filter(f, entries))
+
+def clearAllDrops(entries, blank_shard_id, blank_item_id, blank_coin_id):
+	patchset = []
+	for entry in entries:
+		patchset.append( Patch(entry.Shard.Id['offset'], blank_shard_id))
+		patchset.append( Patch(entry.Shard.Rate['offset'], 0.0))
+		patchset.append( Patch(entry.RareItem.Id['offset'], blank_item_id))
+		patchset.append( Patch(entry.RareItem.Rate['offset'], 0.0))
+		patchset.append( Patch(entry.CommonItem.Id['offset'], blank_item_id))
+		patchset.append( Patch(entry.CommonItem.Rate['offset'], 0.0))
+		patchset.append( Patch(entry.RareIngredient.Id['offset'], blank_item_id))
+		patchset.append( Patch(entry.RareIngredient.Rate['offset'], 0.0))
+		patchset.append( Patch(entry.CommonIngredient.Id['offset'], blank_item_id))
+		patchset.append( Patch(entry.CommonIngredient.Rate['offset'], 0.0))
+		patchset.append( Patch(entry.Coin.Type['offset'], blank_coin_id))
+		patchset.append( Patch(entry.Coin.Override['offset'], 0))
+		patchset.append( Patch(entry.Coin.Rate['offset'], 0.0))
+	return patchset
+def filterProgressionItems(entries):
+	#True if keep, False if drop
+	def f(entry):
+		bad = [
+			'ChangeHP', #wtf is this
+			'Silverbromide',
+			'SpikeBreast', #Spike Aegis
+			'VillageKey', #Key to get out of Ardantville house
+		]
+		for name in bad:
+			if name in entry.RareItem.Name:
+				return False
+			if name in entry.CommonItem.Name:
+				return False
+		return True
+	return list(filter(f, entries))
+	
+def filterSingleEncounterMobs(entries):
+	#True if keep, False if drop
+	def f(entry):
+		bad = [	'N1001', 'N1011', 'N1003', 'N2004', 'N1005',
+				'N2001', 'N1006', 'N1012', 'N1002', 'N2014',
+				'N2007', 'N2006', 'N1004', 'N1008', 'N1009',
+				'N1013', 'N2012'
+		]
+		for name in bad:
+			if name in entry.Name:
+				return False
+		return True
+	return list(filter(f, entries))
+	
+def filterUnknowns(entries):
+	def f(entry):
+		bad = [	'HPRecover',
+				'SPEED',
+				'Peanut',
+				'Lantern',
+				'AAAA',
+				'TestIngredients',
+				'VillageKeyBox',
+				'PotionMaterial',
+				'PhotoEvent',
+				'CertificationboardEvent',
+				'Qu07_Last',
+				'Swordsman',
+				'N3006_OpeningDemo'
+		]
+		for name in bad:
+			if name in entry.Name:
+				return False
+		return True
+	return list( filter(f, entries))
+	
+def assignShards(entries, shards):
+	assert( len(entries) == len(shards))
+	patchset = []
+	for e, shard in zip(entries, shards):
+		patchset.append( Patch(e.Shard.Id['offset'], shard.Id['Value']) )
+		if e.AreaChange['Value'] == 0 and 'Treasurebox' in e.Name and not 'None' in shard.Name:
+			patchset.append( Patch(e.Shard.Rate['offset'], 100.0) )
+		else:
+			patchset.append( Patch(e.Shard.Rate['offset'], shard.Rate['Value']) )
+	return patchset
+def assignRareItems(entries, ritems):
+	assert( len(entries) == len(ritems))
+	patchset = []
+	for e, ritem in zip(entries, ritems):
+		patchset.append( Patch(e.RareItem.Id['offset'], ritem.Id['Value']) )
+		if e.AreaChange['Value'] == 0 and 'Treasurebox' in e.Name and not 'None' in ritem.Name:
+			patchset.append( Patch(e.RareItem.Rate['offset'], 100.0) )
+		else:
+			patchset.append( Patch(e.RareItem.Rate['offset'], ritem.Rate['Value']) )
+		patchset.append( Patch(e.RareItem.Quantity['offset'], ritem.Quantity['Value']) )
+	return patchset
+def assignCommonItems(entries, citems):
+	assert( len(entries) == len(citems))
+	patchset = []
+	for e, citem in zip(entries, citems):
+		patchset.append( Patch(e.CommonItem.Id['offset'], citem.Id['Value']) )
+		if e.AreaChange['Value'] == 0 and 'Treasurebox' in e.Name and not 'None' in citem.Name:
+			patchset.append( Patch(e.CommonItem.Rate['offset'], 100.0) )
+		else:
+			patchset.append( Patch(e.CommonItem.Rate['offset'], citem.Rate['Value']) )
+		patchset.append( Patch(e.CommonItem.Quantity['offset'], citem.Quantity['Value']) )
+	return patchset
+
+def assignRareIngredients(entries, rings):
+	assert( len(entries) == len(rings))
+	patchset = []
+	for e, ring in zip(entries, rings):
+		patchset.append( Patch(e.RareIngredient.Id['offset'], ring.Id['Value']) )
+		if e.AreaChange['Value'] == 0 and 'Treasurebox' in e.Name and not 'None' in ring.Name:
+			patchset.append( Patch(e.RareIngredient.Rate['offset'], 100.0) )
+		else:
+			patchset.append( Patch(e.RareIngredient.Rate['offset'], ring.Rate['Value']) )
+		patchset.append( Patch(e.RareIngredient.Quantity['offset'], ring.Quantity['Value']) )
+	return patchset
+	
+def assignCommonIngredients(entries, cings):
+	assert( len(entries) == len(cings))
+	patchset = []
+	for e, cing in zip(entries, cings):
+		patchset.append( Patch(e.CommonIngredient.Id['offset'], cing.Id['Value']) )
+		if e.AreaChange['Value'] == 0 and 'TreasureBox' in e.Name and not 'None' in cing.Name:
+			patchset.append( Patch(e.CommonIngredient.Rate['offset'], 100.0) )
+		else:
+			patchset.append( Patch(e.CommonIngredient.Rate['offset'], cing.Rate['Value']) )
+		patchset.append( Patch(e.CommonIngredient.Quantity['offset'], cing.Quantity['Value']) )
+	return patchset
+	
+def assignCoins(entries, coins):
+	assert (len(entries) == len(coins))
+	patchset = []
+	for e, coin in zip(entries, coins):
+		patchset.append( Patch( e.Coin.Type['offset'], coin.Type['Value']) )
+		patchset.append( Patch( e.Coin.Override['offset'], coin.Override['Value']) )
+		patchset.append( Patch( e.Coin.Rate['offset'], coin.Rate['Value']) )
+	return patchset
+	
+def handleEmptyChests(entries, blank_coin_id, d10_coin_id):
+	patchset = []
+	for entry in entries:
+		if 'TreasureBox' in entry.Name:
+			if entry.RareItem.Rate['Value'] == 0:
+				if entry.CommonItem.Rate['Value'] == 0:
+					patchset.append( Patch( entry.Coin.Type['offset'], d10_coin_id) )
+					patchset.append( Patch( entry.Coin.Override['offset'], 10) ) #Override appears to be the denomination
+					patchset.append( Patch( entry.Coin.Rate['offset'], 0.0) ) #Rate isn't used
+	return patchset
+
+def applyPatches(raw_orig, patchset):
+	stream = BytesIO(raw_orig)
+	for patch in patchset:
+		stream.seek(patch.Offset)
+		if isinstance(patch.Value, int):
+			stream.write( struct.pack("i", patch.Value))
+		elif isinstance(patch.Value, float):
+			stream.write( struct.pack("f", patch.Value))
+		else:
+			raise NotImplementedError(type(patch.Value))
+	return stream.getbuffer()
 	
 if __name__ == "__main__":
 	import argparse
@@ -295,99 +260,150 @@ if __name__ == "__main__":
 	parser = argparse.ArgumentParser( \
 		description="Bloodstained drop randomizer",
 		usage="%(prog)s --input [infile]"
-		)
-	parser.add_argument("--debug", help="Enable debug output", action='store_true', default=False)
+	)
+	#parser.add_argument("--debug", help="Enable debug output", action='store_true', default=False)
 	parser.add_argument("--input", help="Original 'PB_DT_DropRateMaster.uasset' file", \
 						action='store', required=True)
 	parser.add_argument("--seed", help="Seed for randomizer", action='store', default=random.random())
 	
-	#Parse arguments
 	args = parser.parse_args()
 	
-	#Create JSON from original input file
-	with open(args.input, "rb") as original_file:
-		uasset = udump.UAsset(original_file)
-	items = [udump.Item(obj) for obj in uasset.Summary.Exports[0].Object.ObjectData.Data]
-	drop_rate_master = json.loads(json.dumps(items, cls=udump.UAssetEncoder))
+	#create dump files
+	udump.dumpFile(args.input)
+	#
 	
-	#Set random seed
-	random.seed(args.seed)
+	drop_entries = []
+	
+	with open(args.input[:-7] + "-export-0.json", 'r') as jdump:
+		drm = json.loads(jdump.read())
+		with open(args.input[:-7] + "-names.json", 'r') as namedump:
+			names = json.loads(namedump.read())
 		
-	#get all possible locations with associated drops
-	all_locations = [DropLocation(*getAllFromEntry(entry)) for entry in drop_rate_master]
-
-	#get just chests
-	all_chests = [loc for loc in allChests(all_locations)]
-	#get just mobs
-	all_mobs = [loc for loc in allMobs(all_locations)]
-	#get just walls
-	all_walls = [loc for loc in allWalls(all_locations)]
-	
-	
-	#Find empty/low drops to use if needed.
-	#Since they can be copied endlessly without breaking anything it's a safe default drop.  Usually.
-	#find empty coin to copy into all chests without a valid drop
-	#FIXME: empty coin still screws up, using low-value coin instead
-	empty_coin = [c.coin for c in all_chests if "D10\u0000" in c.coin.name["Value"]][0]
-	#find empty drop
-	empty_drop = [e.common_item for e in all_chests if "None" in e.common_item.name["Value"]][0]
-	
-	#Get list of all locations to be entered into the randomization pool
-	combined = all_chests + all_mobs + all_walls 
-	
-	#list of patches to apply to the final file
-	patches = []
-	#Clear all drop slots
-	patches += clearAllDrops(combined)
-	
-	#Get all items 
-	shards = [loc.shard for loc in combined]
-	rare_items = [loc.rare_item for loc in combined]
-	common_items = [loc.common_item for loc in combined]
-	rare_ingredients = [loc.rare_ingredient for loc in combined]
-	common_ingredients = [loc.common_ingredient for loc in combined]
-	coins = [loc.coin for loc in combined]
-	
-	#shuffle them all around
-	random.shuffle(shards)
-	random.shuffle(rare_items)
-	random.shuffle(common_items)
-	random.shuffle(rare_ingredients)
-	random.shuffle(common_ingredients)
-	random.shuffle(coins)
-	
-	#shuffle locations
-	random.shuffle(combined)
-	
-	#re-assign random shards to first len(shards) locations
-	patches += assignShards(combined[: len(shards)], shards)
-	#'' '' '' first len(rare_items) locations
-	patches += assignRareItems(combined[: len(rare_items)], rare_items)
-	#etc etc
-	patches += assignCommonItems(combined[: len(common_items)], common_items)
-	patches += assignRareIngredients(combined[: len(rare_ingredients)], rare_ingredients)
-	patches += assignCommonIngredients(combined[: len(common_ingredients)], common_ingredients)
-	patches += assignCoins(combined[: len(coins)], coins)
-	
-	#Should result in all shards/items/coins being re-assigned to somewhere.
-	#Does nothing to guarantee things intended to be re-aquired like ingredients are infinitely available.
-	
-	#For mobs that are single-fight only, set drop rates to 100% for any none-None items/shards
-	#TODO: UNTESTED
-	patches += handleNonRepeatableMobs(combined)
-	
-	#with open("PB_DT_DropRateMaster.uasset", "rb") as file:
-	
-	with open(args.input, "rb") as file:
-		raw = file.read()
-	
-	mod = applyPatches(raw, patches)
-	
-	outputfile = "unrealpak\Randomizer\BloodstainedRotN\Content\Core\DataTable\PB_DT_DropRateMaster.uasset"
-	with open(outputfile, "wb") as file:
-		file.write(mod)
-	
-	#create mod .pak file
-	os.system(r".\unrealpak\UnrealPak-With-Compression.bat Randomizer")
-	os.system(r"move .\unrealpak\Randomizer.pak .")
-	sys.exit()
+		#Main drop table structure
+		outer = drm['Extra']['Data']
+		
+		all_drop_entries = []
+		#Parse all drop entries
+		for entry in outer:
+			#Name of the drop location
+			name = entry['Name'][:-1]
+			#drop data
+			tags = entry['Obj']['Tags']
+			#Convert {'Name', 'Value'} tuple to dict
+			d = {}
+			for e in tags:
+				#strip last character off name, it's a null
+				d[e['Name'][:-1]] = e['Value']
+			
+			#extract shard
+			shard = Shard(d['ShardId'], d['ShardRate'], names)
+			#extract Rare Item
+			rareitem = Item(d['RareItemId'], d['RareItemQuantity'], d['RareItemRate'], names)
+			#extract Common Item
+			commonitem = Item(d['CommonItemId'], d['CommonItemQuantity'], d['CommonRate'], names)
+			#extract Rare Ingredient
+			rareingredient = Item(d['RareIngredientId'], d['RareIngredientQuantity'], d['RareIngredientRate'], names)
+			#extract Common Ingredient
+			commoningredient = Item(d['CommonIngredientId'], d['CommonIngredientQuantity'], d['CommonIngredientRate'], names)
+			#extract coin
+			coin = Coin(d['CoinType'], d['CoinOverride'], d['CoinRate'], names)
+			#Construct full entry
+			drop = DropEntry(name, shard, rareitem, commonitem, rareingredient, commoningredient, coin, d['AreaChangeTreasureFlag'])
+			all_drop_entries.append(drop)
+		
+		print("Loaded {} drop entries".format(len(all_drop_entries)))
+		
+		
+		
+		print("Filtering out MaxHPUP, MaxMPUP, MaxBulletUP...")
+		valid_drop_entries = filterHPMPBulletUP(all_drop_entries)
+		#print("{} remain".format( len(valid_drop_entries)))
+		
+		print("Filtering out unknown drop entries...")
+		valid_drop_entries = filterUnknowns(valid_drop_entries)
+		
+		print("Filtering out progression-critical shards...")
+		valid_drop_entries = filterProgressionShards(valid_drop_entries)
+		#print("{} remain".format( len(valid_drop_entries)))
+		
+		print("Filtering out progression-critical items...")
+		valid_drop_entries = filterProgressionItems(valid_drop_entries)
+		#print("{} remain".format( len(valid_drop_entries)))
+		
+		print("Filtering out single-encounter mobs...")
+		valid_drop_entries = filterSingleEncounterMobs(valid_drop_entries)
+		#print("{} remain".format( len(valid_drop_entries)))
+		
+		#Start randomization!
+		print("Starting randomization with {} entries".format( len(valid_drop_entries)))
+		
+		#Collect remaining shards
+		shards = [e.Shard for e in valid_drop_entries if not 'None' in e.Shard.Name]
+		rare_items = [e.RareItem for e in valid_drop_entries if not 'None' in e.RareItem.Name]
+		common_items = [e.CommonItem for e in valid_drop_entries if not 'None' in e.CommonItem.Name]
+		rare_ingredients = [e.RareIngredient for e in valid_drop_entries if not 'None' in e.RareIngredient.Name]
+		common_ingredients = [e.CommonIngredient for e in valid_drop_entries if not 'None' in e.CommonIngredient.Name]
+		coins = [e.Coin for e in valid_drop_entries if not 'None' in e.Coin.Name]
+		
+		print("{} shards in play".format(len(shards)))
+		print("{} rare items in play".format(len(rare_items)))
+		print("{} common items in play".format(len(common_items)))
+		print("{} rare ingredients in play".format(len(rare_ingredients)))
+		print("{} common ingredients in play".format(len(common_ingredients)))
+		print("{} coins in play".format(len(coins)))
+		
+		#find 'None' shard ID
+		blank_shard_id = [e.Shard for e in valid_drop_entries if 'None' in e.Shard.Name][0].Id['Value']
+		#find 'None' item ID
+		blank_item_id = [e.RareItem for e in valid_drop_entries if 'None' in e.RareItem.Name][0].Id['Value']
+		#Find 'None' coin Type
+		blank_coin_id = [e.Coin for e in valid_drop_entries if 'None' in e.Coin.Name][0].Type['Value']
+		#Find 'D10' coin Type
+		#needed for otherwise empty chests
+		d10_coin = [e.Coin for e in valid_drop_entries if 'D10' in e.Coin.Name][0]
+		d10_coin_id = d10_coin.Type['Value']
+		
+		
+		random.seed(args.seed)
+		
+		blank_drop_entries = valid_drop_entries.copy()
+		patches = clearAllDrops(blank_drop_entries, blank_shard_id, blank_item_id, blank_coin_id)
+		
+		#Assign shards
+		entries = random.sample(blank_drop_entries, len(shards))
+		patches += assignShards(entries, shards)
+		
+		#Assign rare items
+		entries = random.sample(blank_drop_entries, len(rare_items))
+		patches += assignRareItems(entries, rare_items)
+		
+		#Assign common items
+		entries = random.sample(blank_drop_entries, len(common_items))
+		patches += assignCommonItems(entries, common_items)
+		
+		#Assign rare ingredients
+		entries = random.sample(blank_drop_entries, len(rare_ingredients))
+		patches += assignRareIngredients(entries, rare_ingredients)
+		
+		#Assign common ingredients
+		entries = random.sample(blank_drop_entries, len(common_ingredients))
+		patches += assignCommonIngredients(entries, common_ingredients)
+		
+		#Assign coins
+		entries = random.sample(blank_drop_entries, len(coins))
+		patches += assignCoins(entries, coins)
+		
+		#Check that chests have something
+		patches += handleEmptyChests(entries, blank_coin_id, d10_coin_id)
+		
+		print("{} patches to apply".format(len(patches)))
+		
+		with open(args.input, 'rb') as orig:
+			new = applyPatches(orig.read(), patches)
+			with open("unrealpak\Randomizer\BloodstainedRotN\Content\Core\DataTable\PB_DT_DropRateMaster.uasset", 'wb') as modified:
+				modified.write(new)
+		
+		print("Creating .pak")
+		
+		os.system(r".\unrealpak\UnrealPak-With-Compression.bat Randomizer")
+		os.system(r"move .\unrealpak\Randomizer.pak .")
