@@ -154,7 +154,15 @@ def filterUnknowns(entries):
 				'CertificationboardEvent',
 				'Qu07_Last',
 				'Swordsman',
-				'N3006_OpeningDemo'
+				'N3006_OpeningDemo',
+				'Treasurebox_BRM_A_FIRST',
+				'Treasurebox_BRM_B_FIRST',
+				'TreasureBox_BRM_A',
+				'TreasureBox_BRM_B',
+				'TreasureBox_OfflineChaos_A',
+				'TreasureBox_OfflineChaos_B',
+				'Treasurebox_OnlineChaos_A',
+				'Treasurebox_OnlineChaos_B',
 		]
 		for name in bad:
 			if name in entry.Name:
@@ -267,6 +275,10 @@ if __name__ == "__main__":
 	parser.add_argument("--seed", help="Seed for randomizer", action='store', default=random.random())
 	
 	args = parser.parse_args()
+	
+	#Check if .json dumps already exist for the given filename
+	files = os.listdir()
+	jfiles = [f for f in files if '.json' in f]
 	
 	#create dumps
 	jnames, jexports, jimports = udump.dumpFile(args.input)
