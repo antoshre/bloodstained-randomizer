@@ -115,7 +115,7 @@ def filterProgressionItems(entries):
 		bad = [
 			'ChangeHP', #wtf is this
 			'Silverbromide',
-			'SpikeBreast', #Spike Aegis
+			'BreastplateofAguilar', #Spike Aegis
 			'VillageKey', #Key to get out of Ardantville house
 		]
 		for name in bad:
@@ -268,142 +268,140 @@ if __name__ == "__main__":
 	
 	args = parser.parse_args()
 	
-	#create dump files
-	udump.dumpFile(args.input)
-	#
+	#create dumps
+	jnames, jexports, jimports = udump.dumpFile(args.input)
 	
 	drop_entries = []
+
+	#Should be true for DropRateMaster
+	drm = json.loads(jexports[0])
+	names = json.loads(jnames)	
 	
-	with open(args.input[:-7] + "-export-0.json", 'r') as jdump:
-		drm = json.loads(jdump.read())
-		with open(args.input[:-7] + "-names.json", 'r') as namedump:
-			names = json.loads(namedump.read())
+	#Main drop table structure
+	outer = drm['Extra']['Data']
+	
+	all_drop_entries = []
+	#Parse all drop entries
+	for entry in outer:
+		#Name of the drop location
+		name = entry['Name'][:-1]
+		#drop data
+		tags = entry['Obj']['Tags']
+		#Convert {'Name', 'Value'} tuple to dict
+		d = {}
+		for e in tags:
+			#strip last character off name, it's a null
+			d[e['Name'][:-1]] = e['Value']
 		
-		#Main drop table structure
-		outer = drm['Extra']['Data']
-		
-		all_drop_entries = []
-		#Parse all drop entries
-		for entry in outer:
-			#Name of the drop location
-			name = entry['Name'][:-1]
-			#drop data
-			tags = entry['Obj']['Tags']
-			#Convert {'Name', 'Value'} tuple to dict
-			d = {}
-			for e in tags:
-				#strip last character off name, it's a null
-				d[e['Name'][:-1]] = e['Value']
-			
-			#extract shard
-			shard = Shard(d['ShardId'], d['ShardRate'], names)
-			#extract Rare Item
-			rareitem = Item(d['RareItemId'], d['RareItemQuantity'], d['RareItemRate'], names)
-			#extract Common Item
-			commonitem = Item(d['CommonItemId'], d['CommonItemQuantity'], d['CommonRate'], names)
-			#extract Rare Ingredient
-			rareingredient = Item(d['RareIngredientId'], d['RareIngredientQuantity'], d['RareIngredientRate'], names)
-			#extract Common Ingredient
-			commoningredient = Item(d['CommonIngredientId'], d['CommonIngredientQuantity'], d['CommonIngredientRate'], names)
-			#extract coin
-			coin = Coin(d['CoinType'], d['CoinOverride'], d['CoinRate'], names)
-			#Construct full entry
-			drop = DropEntry(name, shard, rareitem, commonitem, rareingredient, commoningredient, coin, d['AreaChangeTreasureFlag'])
-			all_drop_entries.append(drop)
-		
-		print("Loaded {} drop entries".format(len(all_drop_entries)))
-		
-		
-		
-		print("Filtering out MaxHPUP, MaxMPUP, MaxBulletUP...")
-		valid_drop_entries = filterHPMPBulletUP(all_drop_entries)
-		#print("{} remain".format( len(valid_drop_entries)))
-		
-		print("Filtering out unknown drop entries...")
-		valid_drop_entries = filterUnknowns(valid_drop_entries)
-		
-		print("Filtering out progression-critical shards...")
-		valid_drop_entries = filterProgressionShards(valid_drop_entries)
-		#print("{} remain".format( len(valid_drop_entries)))
-		
-		print("Filtering out progression-critical items...")
-		valid_drop_entries = filterProgressionItems(valid_drop_entries)
-		#print("{} remain".format( len(valid_drop_entries)))
-		
-		print("Filtering out single-encounter mobs...")
-		valid_drop_entries = filterSingleEncounterMobs(valid_drop_entries)
-		#print("{} remain".format( len(valid_drop_entries)))
-		
-		#Start randomization!
-		print("Starting randomization with {} entries".format( len(valid_drop_entries)))
-		
-		#Collect remaining shards
-		shards = [e.Shard for e in valid_drop_entries if not 'None' in e.Shard.Name]
-		rare_items = [e.RareItem for e in valid_drop_entries if not 'None' in e.RareItem.Name]
-		common_items = [e.CommonItem for e in valid_drop_entries if not 'None' in e.CommonItem.Name]
-		rare_ingredients = [e.RareIngredient for e in valid_drop_entries if not 'None' in e.RareIngredient.Name]
-		common_ingredients = [e.CommonIngredient for e in valid_drop_entries if not 'None' in e.CommonIngredient.Name]
-		coins = [e.Coin for e in valid_drop_entries if not 'None' in e.Coin.Name]
-		
-		print("{} shards in play".format(len(shards)))
-		print("{} rare items in play".format(len(rare_items)))
-		print("{} common items in play".format(len(common_items)))
-		print("{} rare ingredients in play".format(len(rare_ingredients)))
-		print("{} common ingredients in play".format(len(common_ingredients)))
-		print("{} coins in play".format(len(coins)))
-		
-		#find 'None' shard ID
-		blank_shard_id = [e.Shard for e in valid_drop_entries if 'None' in e.Shard.Name][0].Id['Value']
-		#find 'None' item ID
-		blank_item_id = [e.RareItem for e in valid_drop_entries if 'None' in e.RareItem.Name][0].Id['Value']
-		#Find 'None' coin Type
-		blank_coin_id = [e.Coin for e in valid_drop_entries if 'None' in e.Coin.Name][0].Type['Value']
-		#Find 'D10' coin Type
-		#needed for otherwise empty chests
-		d10_coin = [e.Coin for e in valid_drop_entries if 'D10' in e.Coin.Name][0]
-		d10_coin_id = d10_coin.Type['Value']
-		
-		
-		random.seed(args.seed)
-		
-		blank_drop_entries = valid_drop_entries.copy()
-		patches = clearAllDrops(blank_drop_entries, blank_shard_id, blank_item_id, blank_coin_id)
-		
-		#Assign shards
-		entries = random.sample(blank_drop_entries, len(shards))
-		patches += assignShards(entries, shards)
-		
-		#Assign rare items
-		entries = random.sample(blank_drop_entries, len(rare_items))
-		patches += assignRareItems(entries, rare_items)
-		
-		#Assign common items
-		entries = random.sample(blank_drop_entries, len(common_items))
-		patches += assignCommonItems(entries, common_items)
-		
-		#Assign rare ingredients
-		entries = random.sample(blank_drop_entries, len(rare_ingredients))
-		patches += assignRareIngredients(entries, rare_ingredients)
-		
-		#Assign common ingredients
-		entries = random.sample(blank_drop_entries, len(common_ingredients))
-		patches += assignCommonIngredients(entries, common_ingredients)
-		
-		#Assign coins
-		entries = random.sample(blank_drop_entries, len(coins))
-		patches += assignCoins(entries, coins)
-		
-		#Check that chests have something
-		patches += handleEmptyChests(entries, blank_coin_id, d10_coin_id)
-		
-		print("{} patches to apply".format(len(patches)))
-		
-		with open(args.input, 'rb') as orig:
-			new = applyPatches(orig.read(), patches)
-			with open("unrealpak\Randomizer\BloodstainedRotN\Content\Core\DataTable\PB_DT_DropRateMaster.uasset", 'wb') as modified:
-				modified.write(new)
-		
-		print("Creating .pak")
-		
-		os.system(r".\unrealpak\UnrealPak-With-Compression.bat Randomizer")
-		os.system(r"move .\unrealpak\Randomizer.pak .")
+		#extract shard
+		shard = Shard(d['ShardId'], d['ShardRate'], names)
+		#extract Rare Item
+		rareitem = Item(d['RareItemId'], d['RareItemQuantity'], d['RareItemRate'], names)
+		#extract Common Item
+		commonitem = Item(d['CommonItemId'], d['CommonItemQuantity'], d['CommonRate'], names)
+		#extract Rare Ingredient
+		rareingredient = Item(d['RareIngredientId'], d['RareIngredientQuantity'], d['RareIngredientRate'], names)
+		#extract Common Ingredient
+		commoningredient = Item(d['CommonIngredientId'], d['CommonIngredientQuantity'], d['CommonIngredientRate'], names)
+		#extract coin
+		coin = Coin(d['CoinType'], d['CoinOverride'], d['CoinRate'], names)
+		#Construct full entry
+		drop = DropEntry(name, shard, rareitem, commonitem, rareingredient, commoningredient, coin, d['AreaChangeTreasureFlag'])
+		all_drop_entries.append(drop)
+	
+	print("Loaded {} drop entries".format(len(all_drop_entries)))
+	
+	
+	
+	print("Filtering out MaxHPUP, MaxMPUP, MaxBulletUP...")
+	valid_drop_entries = filterHPMPBulletUP(all_drop_entries)
+	#print("{} remain".format( len(valid_drop_entries)))
+	
+	print("Filtering out unknown drop entries...")
+	valid_drop_entries = filterUnknowns(valid_drop_entries)
+	
+	print("Filtering out progression-critical shards...")
+	valid_drop_entries = filterProgressionShards(valid_drop_entries)
+	#print("{} remain".format( len(valid_drop_entries)))
+	
+	print("Filtering out progression-critical items...")
+	valid_drop_entries = filterProgressionItems(valid_drop_entries)
+	#print("{} remain".format( len(valid_drop_entries)))
+	
+	print("Filtering out single-encounter mobs...")
+	valid_drop_entries = filterSingleEncounterMobs(valid_drop_entries)
+	#print("{} remain".format( len(valid_drop_entries)))
+	
+	#Start randomization!
+	print("Starting randomization with {} entries".format( len(valid_drop_entries)))
+	
+	#Collect remaining shards
+	shards = [e.Shard for e in valid_drop_entries if not 'None' in e.Shard.Name]
+	rare_items = [e.RareItem for e in valid_drop_entries if not 'None' in e.RareItem.Name]
+	common_items = [e.CommonItem for e in valid_drop_entries if not 'None' in e.CommonItem.Name]
+	rare_ingredients = [e.RareIngredient for e in valid_drop_entries if not 'None' in e.RareIngredient.Name]
+	common_ingredients = [e.CommonIngredient for e in valid_drop_entries if not 'None' in e.CommonIngredient.Name]
+	coins = [e.Coin for e in valid_drop_entries if not 'None' in e.Coin.Name]
+	
+	print("{} shards in play".format(len(shards)))
+	print("{} rare items in play".format(len(rare_items)))
+	print("{} common items in play".format(len(common_items)))
+	print("{} rare ingredients in play".format(len(rare_ingredients)))
+	print("{} common ingredients in play".format(len(common_ingredients)))
+	print("{} coins in play".format(len(coins)))
+	
+	#find 'None' shard ID
+	blank_shard_id = [e.Shard for e in valid_drop_entries if 'None' in e.Shard.Name][0].Id['Value']
+	#find 'None' item ID
+	blank_item_id = [e.RareItem for e in valid_drop_entries if 'None' in e.RareItem.Name][0].Id['Value']
+	#Find 'None' coin Type
+	blank_coin_id = [e.Coin for e in valid_drop_entries if 'None' in e.Coin.Name][0].Type['Value']
+	#Find 'D10' coin Type
+	#needed for otherwise empty chests
+	d10_coin = [e.Coin for e in valid_drop_entries if 'D10' in e.Coin.Name][0]
+	d10_coin_id = d10_coin.Type['Value']
+	
+	
+	random.seed(args.seed)
+	
+	blank_drop_entries = valid_drop_entries.copy()
+	patches = clearAllDrops(blank_drop_entries, blank_shard_id, blank_item_id, blank_coin_id)
+	
+	#Assign shards
+	entries = random.sample(blank_drop_entries, len(shards))
+	patches += assignShards(entries, shards)
+	
+	#Assign rare items
+	entries = random.sample(blank_drop_entries, len(rare_items))
+	patches += assignRareItems(entries, rare_items)
+	
+	#Assign common items
+	entries = random.sample(blank_drop_entries, len(common_items))
+	patches += assignCommonItems(entries, common_items)
+	
+	#Assign rare ingredients
+	entries = random.sample(blank_drop_entries, len(rare_ingredients))
+	patches += assignRareIngredients(entries, rare_ingredients)
+	
+	#Assign common ingredients
+	entries = random.sample(blank_drop_entries, len(common_ingredients))
+	patches += assignCommonIngredients(entries, common_ingredients)
+	
+	#Assign coins
+	entries = random.sample(blank_drop_entries, len(coins))
+	patches += assignCoins(entries, coins)
+	
+	#Check that chests have something
+	patches += handleEmptyChests(entries, blank_coin_id, d10_coin_id)
+	
+	print("{} patches to apply".format(len(patches)))
+	
+	with open(args.input, 'rb') as orig:
+		new = applyPatches(orig.read(), patches)
+		with open("unrealpak\Randomizer\BloodstainedRotN\Content\Core\DataTable\PB_DT_DropRateMaster.uasset", 'wb') as modified:
+			modified.write(new)
+	
+	print("Creating .pak")
+	
+	os.system(r".\unrealpak\UnrealPak-With-Compression.bat Randomizer")
+	os.system(r"move .\unrealpak\Randomizer.pak .")
