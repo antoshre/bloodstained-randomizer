@@ -29,3 +29,9 @@ Normal usage:
 `PB_DT_DropRateMaster.uasset` : Original uasset from the Bloodstained install
 
 If all goes well a file named `Randomizer.pak` should be created in the top directory.  This is the mod.
+
+## Important information
+
+This randomizer does not currently change progression-important shards/items.  This is in an attempt to produce configurations that are can be completed following normal vanilla progression.
+
+HP/MP/Capacity upgrades are not moved.  They are special and cause bad things to happen when moved.
